@@ -1,0 +1,202 @@
+---
+title: ""
+author: "Duc-Quang Nguyen | @duc_qn"
+date: " 2017"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: simplex
+---
+
+http://spatial.ly/2014/08/population-lines/
+http://www.whackdata.com/2014/08/04/line-graphs-parallel-processing-r/
+
+https://gis.stackexchange.com/questions/45263/converting-geographic-coordinate-system-in-r
+
+
+# Data source
+
+* [GEOSTAT](http://ec.europa.eu/eurostat/web/gisco/geodata/reference-data/population-distribution-demography/geostat)
+* [Coordinate reference system ETRS89 / LAEA](https://epsg.io/3035)
+
+http://spatialreference.org/ref/epsg/etrs89-etrs-laea/
+
+
+```{r setup, include=FALSE}
+getGeostatProj <- F
+highreStuff <- F
+animate <- F
+
+library(tidyverse)
+library(scales)
+
+### Mapping 
+# require(rgdal)
+# require(rgeos)
+# require(maptools)
+
+
+### Misc stuff
+#require(classInt)
+require(viridis)
+```
+
+```{r load the data  geostat}
+data.file <- list.files(path = "Version 2_0_1", pattern = "GEOSTAT_grid_POP_1K_2011_V2_0_1.csv", full.names = T) # the actual population data of the GEOSTAT grid in csv forma
+data.file2 <- list.files(path = "Version 2_0_1", pattern = "JRC-GHSL_AIT-grid-POP_1K_2011.csv", full.names = T) # the modelled data for those countries that could not provide national data: CY, IS, LU, Bosnia and Herzegovina, Serbia, Montenegro, the Former Yugoslav Republic of Macedonia, Andorra, Isle of Man, Monaco, San Marino, Vatican State;
+
+if(identical(data.file, character(0)) || identical(data.file2, character(0))) {
+  # download the zip file and save it in the working directory
+  datazip.file <- paste0(getwd(), "/geostat.zip")
+  
+  download.file("http://ec.europa.eu/eurostat/cache/GISCO/geodatafiles/GEOSTAT-grid-POP-1K-2011-V2-0-1.zip", datazip.file)
+  unzip(datazip.file)  
+}
+
+data.read <- read_csv(data.file)
+data.read2 <- read_csv(data.file2)
+
+# download city population data (mainly to get the name of the city in geostat weird coordinates system)
+# data.file3 <- dir(pattern = "Urban_audit_2011_2014_SH", full.names = T)
+# if(identical(data.file3, character(0))) {
+#     datazip.file <- paste0(getwd(), "/geostat_urbanAudit.zip")
+#   
+#     download.file("http://ec.europa.eu/eurostat/cache/GISCO/geodatafiles/URAU-2011-2014-SH.zip  ", datazip.file)
+#   unzip(datazip.file)  
+# }
+
+
+# combine and convert GRD_ID to lng lat coordinates
+data <- data.read %>% rbind(data.read2) %>%
+  mutate(lat = as.numeric(gsub('.*N([0-9]+)[EW].*', '\\1', GRD_ID))/100,
+         lng = as.numeric(gsub('.*[EW]([0-9]+)', '\\1', GRD_ID)) * ifelse(gsub('.*([EW]).*', '\\1', GRD_ID) == 'W', -1, 1) / 100)
+  
+data <- data %>% filter(lng > 25, lng < 60) 
+
+data.all <- data %>%
+  group_by(lat=round(lat, 1), lng=round(lng, 1)) %>%
+  summarize(value = sum(TOT_P, na.rm=TRUE), country = paste0(unique(CNTR_CODE), collapse = "/"))  %>%
+  ungroup() %>%
+  complete(lat, lng)
+
+
+data.all <- data.all %>% mutate(group = ifelse(country == 'CH', 'CH', 'non-CH'))
+
+ map <- ggplot(data.all, aes(lng, lat + 5*(value/max(value, na.rm=TRUE)))) +
+    geom_line(size=0.1, alpha=0.8, color='#5A3E37', aes(group=lat), na.rm=TRUE) +
+    ggthemes::theme_map() +
+    coord_quickmap()
+ 
+ # map2 <- ggplot(data.all, aes(lng, lat + 5*(value/max(value, na.rm=TRUE)))) +
+ #   geom_line(size=0.1, alpha=0.8, aes(group=lat, colour = country), na.rm=TRUE) +
+ #   ggthemes::theme_map() + theme(legend.position = "none") + scale_color_viridis(discrete = T) +
+ #   coord_quickmap()
+ 
+ map3 <- ggplot(data.all, aes(lng, lat + 5*(value/max(value, na.rm=TRUE)))) +
+   geom_line(size=0.1, alpha=0.8, aes(group=lat, colour = group), na.rm=TRUE) +
+   ggthemes::theme_map() + theme(legend.position = "none") + 
+   scale_colour_manual(values = rev(c("#193442", "#b15953"))) +
+   coord_quickmap()
+  
+if(animate){
+  for(i in 0:5) {
+    cat(i, "\n")
+    mm <- ggplot(data.all, aes(lng, lat + i*(value/max(value, na.rm=TRUE)))) +
+      geom_line(size=0.1, alpha=0.8, aes(group=lat, colour = group), na.rm=TRUE) +
+      ggthemes::theme_map() + theme(legend.position = "none") + scale_colour_manual(values = rev(c("#7e827a", "#b15953"))) +
+      coord_quickmap()    
+    png(file = paste0("animated_map_", i, ".png"), width = 1000, height = 1400)
+    print(mm)
+    dev.off()
+  }
+  library(magick)
+  
+  maps <- image_read(list.files(pattern = "animated_map", full.names = T))
+
+  frames <- image_morph(maps, frames = 10)
+  animation <- image_animate(frames, fps = 2)
+  image_write(animation, "animated_europeanDensityMap_morph.gif")
+
+
+} 
+ 
+ 
+if(highreStuff) {
+  data2 <- data %>%
+    group_by(lat=round(lat, 2), lng=round(lng, 2)) %>%
+    summarize(value = sum(TOT_P, na.rm=TRUE), country = paste0(unique(CNTR_CODE), collapse = "/"))  %>%
+    ungroup() %>%
+    complete(lat, lng)
+  data2 <- data2 %>% mutate(group = ifelse(country == 'CH', 'CH', 'non-CH'))
+  
+  
+  mapb <- ggplot(data2, aes(lng, lat + 5*(value/max(value, na.rm=TRUE)))) +
+    geom_line(size=0.05, alpha=0.6, color='#5A3E37', aes(group=lat), na.rm=TRUE) +
+    ggthemes::theme_map() +
+    coord_quickmap()
+  
+  
+  mapbb <- ggplot(data2, aes(lng, lat + 4*(value/max(value, na.rm=TRUE)))) +
+    geom_line(size=0.035, alpha=0.3, aes(group=lat, colour = group), na.rm=TRUE) +
+    ggthemes::theme_map() + theme(legend.position = "none") + scale_colour_manual(values = rev(c("#7e827a", "#b15953"))) +
+    coord_quickmap()  
+} 
+
+  
+ 
+  
+```
+
+```{r get country & city names}
+library(rgdal)
+
+
+# library(ggmap)
+# transf <- c(lat = 19.77678, lng = -40.30379)
+# idx <- which(data.all$value >= 500000)
+# 
+# dd <- data.all[idx,]
+# dd$lat <- dd$lat + transf['lat']
+# dd$lng <- dd$lng + transf['lng']
+# 
+# # reverse geocode http://stackoverflow.com/questions/42319993/listing-cities-from-coordinates-in-r
+# res <- lapply(with(dd, paste(lat, lng, sep = ",")), geocode, output = "more")
+# transform(dd, city = sapply(res, "[[", "locality"))
+
+
+dd <- data
+std.proj <- "+init=epsg:4326"
+#std.proj <- "+init=epsg:3857"
+#geostat.proj <- "+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs"
+geostat.proj <- "+init=epsg:3035"
+coordinates(dd) <- ~lng+lat
+proj4string(dd) <- CRS(geostat.proj) # WGS 84
+
+ddd <- as.data.frame(spTransform(dd, CRS(std.proj)))
+transf <- c(lat = 41.385064 - ddd[which.max(ddd$TOT_P),c('lat')] , lng = 2.173403 - ddd[which.max(ddd$TOT_P),c('lng')])
+
+
+dd <- data.all
+dd <- dd %>% mutate(latr = lat * 10^5, lngr = lng * 10^5)
+coordinates(dd) <- c('lngr', 'latr')
+proj4string(dd) <- CRS(geostat.proj)
+ddd <- as.data.frame(spTransform(dd, CRS(std.proj)))
+# ddd$lng <- ddd$lng + transf['lng']
+# ddd$lat <- ddd$lat + transf['lat']
+
+idx <- which(ddd$value >= 200000)
+dddd <- ddd[idx,] %>% arrange(desc(value))
+library(ggmap)
+
+res <- lapply(1:nrow(dddd), function(i) {
+  revgeocode(c(dddd[i, 'lngr'], dddd[i, 'latr']), output = "more")  
+})
+
+
+
+
+
+```
+
+

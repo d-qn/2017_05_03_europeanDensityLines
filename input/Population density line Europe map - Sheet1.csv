@@ -1,0 +1,8 @@
+code,EN,FR,DE,IT,PT,RU,ES,JA,ZH
+title,Switzerland - a country of few population peaks,,,,Suíça - um país de poucos picos populacionais,,Suiza - un país con pocos picos de población,,瑞士，一个人口高峰期屈指可数的国度
+descr,Population density in 2011 in Europe by decimal longitude and latitude (roughly 120 square km),,,,Densidade populacional em 2011 na Europa por longitude e latitude decimais (cerca de 120 quilômetros quadrados),,Densidad de población en 2011 en Europa por longitud y latitud decimales (aprox. 120 kms cuadrados),,2011年，按十进制经纬度呈现的欧洲人口密度图谱(约为120平方公里)
+descr2,Data are normalised by the maximum population density value ,,,,Os dados são contabilizados pelo valor máximo da densidade populacional,,Los datos son contabilizados por el valor máximo de la densidad poblacional,,数据借助最高人口密度值进行了规范化
+source,Source,source,Quelle,Fonte,fonte,Источник,Fuente,出典,来源
+source.name,GEOSTAT | Original idea and code by James Cheshire & Henrik Lindberg ,,,,GEOSTAT | Ideia original e código de James Cheshire & Henrik Lindberg,,GEOSTAT Idea original y código de James Cheshire & Henrik Lindberg,,GEOSTAT/James Cheshire和Henrik Lindberg
+title.font,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,PingFang SC Semibold,PingFang SC Semibold
+base.font,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,Hiragino Sans W1,PingFang SC Light

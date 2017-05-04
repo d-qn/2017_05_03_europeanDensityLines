@@ -1,0 +1,157 @@
+---
+title: "Joy Division like European population density map"
+author: "Duc-Quang Nguyen | @duc_qn"
+date: " 2017"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: simplex
+---
+
+## Inspirations/remix
+* http://spatial.ly/2014/08/population-lines/
+* http://www.whackdata.com/2014/08/04/line-graphs-parallel-processing-r/
+* http://blog.revolutionanalytics.com/2017/04/where-europe-lives.html
+* https://gist.github.com/cpsievert/7dd28a478b4c051180d802321353259d
+https://gis.stackexchange.com/questions/45263/converting-geographic-coordinate-system-in-r
+
+
+## Data source
+
+* [GEOSTAT](http://ec.europa.eu/eurostat/web/gisco/geodata/reference-data/population-distribution-demography/geostat)
+* [Coordinate reference system ETRS89 / LAEA](https://epsg.io/3035)
+
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(plotly)
+library(swiMap)
+library(swiTheme)
+
+translation.file <- "input/Population density line Europe map - Sheet1.csv"
+
+# helper mapping 
+mapTheme <- function(
+  base_size = 22, 
+  base_family = "OpenSans-CondensedLight",
+  title_family = "OpenSans-CondensedBold",
+  bg.colour = "#0e1d25", txt.colour = '#f7f5ed'
+ ) { 
+   theme_bw(base_family = base_family) + 
+    theme(
+      panel.background = element_rect(fill = bg.colour, size = NULL, colour = bg.colour),
+      plot.background = element_rect(fill = bg.colour, size = NULL,colour = bg.colour),
+      axis.line = element_blank(),
+      axis.ticks = element_blank(), 
+      axis.title = element_blank(), 
+      axis.text = element_blank(),
+      panel.grid = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      legend.position="none",
+      plot.margin = unit(c(0.3, 0, 0, 0.15), "cm"),
+      panel.spacing = unit(0,"null"),
+      plot.title=element_text(family = title_family, size = base_size * 1.35, 
+                              colour = txt.colour, margin=margin(b=12, l=150)),
+      plot.subtitle=element_text(family = base_family , size = base_size * 1.15, 
+                                 color = txt.colour,  margin=margin(l=150)),
+      plot.caption=element_text(family = base_family, size = base_size * 0.8, 
+                                colour = txt.colour, margin=margin(t=0, b=7, r=15))
+    ) 
+
+}
+
+```
+
+```{r load the data  geostat, include=F}
+data.file <- list.files(path = "Version 2_0_1", pattern = "GEOSTAT_grid_POP_1K_2011_V2_0_1.csv", full.names = T) # the actual population data of the GEOSTAT grid in csv forma
+data.file2 <- list.files(path = "Version 2_0_1", pattern = "JRC-GHSL_AIT-grid-POP_1K_2011.csv", full.names = T) # the modelled data for those countries that could not provide national data: CY, IS, LU, Bosnia and Herzegovina, Serbia, Montenegro, the Former Yugoslav Republic of Macedonia, Andorra, Isle of Man, Monaco, San Marino, Vatican State;
+
+if(identical(data.file, character(0)) || identical(data.file2, character(0))) {
+  # download the zip file and save it in the working directory
+  datazip.file <- paste0(getwd(), "/geostat.zip")
+  
+  download.file("http://ec.europa.eu/eurostat/cache/GISCO/geodatafiles/GEOSTAT-grid-POP-1K-2011-V2-0-1.zip", datazip.file)
+  unzip(datazip.file)  
+}
+
+data.read <- read_csv(data.file)
+data.read2 <- read_csv(data.file2)
+
+# combine and convert GRD_ID to lng lat coordinates
+data <- data.read %>% rbind(data.read2) %>%
+  mutate(lat = as.numeric(gsub('.*N([0-9]+)[EW].*', '\\1', GRD_ID))/100,
+         lng = as.numeric(gsub('.*[EW]([0-9]+)', '\\1', GRD_ID)) * ifelse(gsub('.*([EW]).*', '\\1', GRD_ID) == 'W', -1, 1) / 100)
+  
+data <- data %>% filter(lng > 25, lng < 59, lat > 16, lat < 52) 
+
+data.all <- data %>%
+  group_by(lat=round(lat, 1), lng=round(lng, 1)) %>%
+  summarize(value = sum(TOT_P, na.rm=TRUE), country = paste0(unique(CNTR_CODE), collapse = "/"))  %>%
+  ungroup() %>%
+  complete(lat, lng)
+
+
+data.all <- data.all %>% mutate(group = ifelse(country == 'CH', 'CH', 'non-CH'))
+```
+
+```{r map!}
+txt <- loadTranslation(translation.file)
+
+ # map <- ggplot(data.all, aes(lng, lat + 5*(value/max(value, na.rm=TRUE)))) +
+ #   geom_line(size=0.1, alpha=0.8, aes(group=lat, colour = group), na.rm=TRUE) +
+ #   mapTheme() + 
+ #   theme(legend.position = "none") + 
+ #   scale_colour_manual(values = rev(c("#e3cda1", "#b15953"))) +
+ #   coord_equal(0.9)
+
+
+myPopDensLineMap <- function(data = data.all, 
+                             title = "Switzerland a country of few population peaks", 
+                             subtitle = "Population density in 2011 by decimal longitude and latitude (roughly 120 square km)", 
+                             caption = "source: GEOSTAT | Original idea and code by James Cheshire & Henrik Lindberg ") {
+  map <- ggplot(data, aes(lng, lat + 5 * (value/max(value, na.rm=TRUE)))) +
+    geom_line(size=0.15, alpha=0.95, aes(group=lat, colour = group), na.rm=TRUE) +
+    mapTheme(base_family = txt['base.font', lang], title_family = txt['title.font', lang]) + 
+    theme(legend.position = "none") + 
+    scale_colour_manual(values = rev(c("#efe9e0", "#b15953"))) +
+    coord_equal(0.9) +
+    labs(title = title, subtitle = subtitle, caption = caption)
+  print(map)
+} 
+
+
+for (lang in colnames(txt)) {
+  png(filename = paste0("output/populationDensityLineEurope_", lang, ".png"), width = 500 * 2.2, height = 560 * 2.2, pointsize = 12)
+  myPopDensLineMap(title = txt['title', lang], subtitle = paste0(txt['descr', lang], "\n", txt['descr2', lang]), caption = paste0(txt['source', lang], ": ", txt['source.name', lang], " | swissinfo.ch  "))
+  dev.off()
+  
+  ### interactive
+  ddd <- data.all
+  ddd <- ddd %>% mutate(country = gsub("UK", "GB", country), country = gsub("EL", "GR", country))
+  ddd <- ddd %>% mutate(label = ifelse(nchar(country) == 2, country, NA)) %>% 
+    mutate(label = countryTranslation(label, lang)[,-1]) %>%
+    mutate(label = ifelse(is.na(label), "", paste0(label, " ")))    
+  
+  map <- ggplot(data = ddd, 
+                aes(x = lng, 
+                    y = lat + 5 * (value/max(value, na.rm=TRUE)), 
+                    group = lat,
+                    text = paste0(label, value)
+                )) +
+    geom_line(size=0.1, alpha=0.8, na.rm=TRUE) +
+    mapTheme(bg.colour = "white") + 
+    coord_quickmap()
+  
+  imap <- ggplotly(map, tooltip = "text") #%>% config(displayModeBar = F)
+  #imap 
+  
+  html.outfile <-  paste0("i_PopulationDensityLineEurope_", lang, ".html")
+  htmlwidgets::saveWidget(as_widget(imap), html.outfile, libdir = "js")
+  
+}
+ 
+
+```
+  
